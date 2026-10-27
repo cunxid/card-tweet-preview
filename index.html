@@ -34,7 +34,20 @@
   .act.rt:hover{color:var(--green)} .act.rt:hover svg{fill:var(--green)}
   .act.like:hover{color:var(--pink)} .act.like:hover svg{fill:var(--pink)}
   .charnote{font-size:11px;color:var(--dim);margin-top:6px}
+  .charnote.over{color:#f4212e;font-weight:700}
   .footer{padding:20px 16px;color:var(--dim);font-size:13px;text-align:center}
+  .text[contenteditable]{outline:none;border-radius:8px;transition:background .15s}
+  .text[contenteditable]:hover{background:rgba(29,155,240,.06)}
+  .text[contenteditable]:focus{background:rgba(29,155,240,.1);box-shadow:0 0 0 1px var(--blue)}
+  .editbar{position:sticky;bottom:0;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);border-top:1px solid var(--border);padding:10px 16px;display:flex;gap:10px;align-items:center;z-index:6}
+  .btn{border:none;border-radius:9999px;padding:8px 18px;font-size:14px;font-weight:700;cursor:pointer}
+  .btn.save{background:var(--blue);color:#fff}
+  .btn.save:hover{background:#1a8cd8}
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+  .btn.ghost:hover{background:rgba(255,255,255,.08)}
+  .savestate{font-size:12px;color:var(--dim);margin-left:auto}
+  .savestate.dirty{color:#ffd400}
+  .savestate.saved{color:var(--green)}
 </style>
 </head>
 <body>
@@ -126,7 +139,67 @@ One shared hand-contact representation unifies video, mocap, and tactile gloves.
     </div>
   </div>
 
-  <div class="footer">Local preview — engagement numbers are placeholders. Videos load from the folders next to this file.</div>
+  <div class="footer">Local preview — engagement numbers are placeholders. Click any tweet text to edit it. Edits save in this browser.</div>
+
+  <div class="editbar">
+    <button class="btn save" id="saveBtn">Save</button>
+    <button class="btn ghost" id="exportBtn">Export .md</button>
+    <button class="btn ghost" id="resetBtn">Reset</button>
+    <span class="savestate" id="saveState">No unsaved changes</span>
+  </div>
 </div>
+<script>
+(function(){
+  const KEY = 'card_tweet_thread_v1';
+  const texts = Array.from(document.querySelectorAll('.text'));
+  const notes = Array.from(document.querySelectorAll('.charnote'));
+  const state = document.getElementById('saveState');
+  const defaults = texts.map(t => t.innerText);
+
+  function countChars(s){
+    // X counts every URL as 23 chars
+    return s.replace(/https?:\/\/\S+|[\w-]+(\.[\w-]+)+(\/\S*)?/g, 'x'.repeat(23)).length;
+  }
+  function updateNote(i){
+    const n = countChars(texts[i].innerText.trim());
+    notes[i].textContent = n + ' / 280 chars';
+    notes[i].classList.toggle('over', n > 280);
+  }
+  function setState(cls, msg){ state.className = 'savestate ' + cls; state.textContent = msg; }
+
+  texts.forEach((t, i) => {
+    t.setAttribute('contenteditable', 'plaintext-only');
+    t.addEventListener('input', () => { updateNote(i); setState('dirty', 'Unsaved changes'); });
+  });
+
+  const saved = localStorage.getItem(KEY);
+  if (saved) {
+    try { JSON.parse(saved).forEach((s, i) => { if (texts[i] != null && s != null) texts[i].innerText = s; }); } catch(e){}
+  }
+  texts.forEach((_, i) => updateNote(i));
+
+  function save(){
+    localStorage.setItem(KEY, JSON.stringify(texts.map(t => t.innerText)));
+    setState('saved', 'Saved ' + new Date().toLocaleTimeString());
+  }
+  document.getElementById('saveBtn').addEventListener('click', save);
+  document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save(); } });
+
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    const md = texts.map((t, i) => '## Tweet ' + (i+1) + '  [' + countChars(t.innerText.trim()) + ' chars]\n\n' + t.innerText.trim()).join('\n\n---\n\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([md], {type:'text/markdown'}));
+    a.download = 'tweet_thread_edited.md';
+    a.click(); URL.revokeObjectURL(a.href);
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if (!confirm('Discard saved edits and restore the original thread?')) return;
+    localStorage.removeItem(KEY);
+    texts.forEach((t, i) => { t.innerText = defaults[i]; updateNote(i); });
+    setState('', 'Restored defaults');
+  });
+})();
+</script>
 </body>
 </html>
